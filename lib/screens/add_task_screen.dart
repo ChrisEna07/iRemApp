@@ -32,18 +32,54 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialDate != null) {
-      _selectedDate = widget.initialDate!;
-    }
+    if (widget.initialDate != null) _selectedDate = widget.initialDate!;
     if (widget.taskToEdit != null) {
       _titleController.text = widget.taskToEdit!.title;
       _selectedDate = widget.taskToEdit!.dateTime;
       _selectedTime = TimeOfDay.fromDateTime(widget.taskToEdit!.dateTime);
       _anticipationDays = widget.taskToEdit!.anticipationDays;
-      if (widget.taskToEdit!.imagePath != null) {
-        _selectedImage = File(widget.taskToEdit!.imagePath!);
-      }
+      if (widget.taskToEdit!.imagePath != null) _selectedImage = File(widget.taskToEdit!.imagePath!);
     }
+  }
+
+  void _showCentralFeedback(String message, IconData icon, Color color, {VoidCallback? onFinished}) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      barrierDismissible: false,
+      builder: (context) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context); // Cierra el feedback
+            if (onFinished != null) onFinished(); // Luego ejecuta la acción (cerrar pantalla)
+          }
+        });
+        return Center(
+          child: TweenAnimationBuilder(
+            tween: Tween<double>(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.elasticOut,
+            builder: (context, double value, child) {
+              return Transform.scale(
+                scale: value,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25), boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 20, spreadRadius: 5)]),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 60, color: color),
+                      const SizedBox(height: 15),
+                      Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black, decoration: TextDecoration.none, fontFamily: 'Roboto')),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _pickImage() async {
@@ -53,10 +89,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
 
   Future<void> _saveTask() async {
     final settings = context.read<AppSettings>();
-    if (_titleController.text.isEmpty) {
-      messengerKey.currentState?.showSnackBar(const SnackBar(content: Text("Escribe qué recordar."), backgroundColor: Colors.orange));
-      return;
-    }
+    if (_titleController.text.isEmpty) return;
     if (kIsWeb) return;
 
     final DateTime scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedTime.hour, _selectedTime.minute);
@@ -79,21 +112,19 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       if (widget.taskToEdit != null) {
         await _dbHelper.updateTask(task);
         id = task.id!;
-        messengerKey.currentState?.showSnackBar(const SnackBar(content: Text("¡Actualizado con éxito!")));
+        _showCentralFeedback("¡Actualizado!", Icons.check_circle, Colors.blue, onFinished: () {
+          if (mounted) Navigator.pop(context);
+        });
       } else {
         id = await _dbHelper.insertTask(task);
-        messengerKey.currentState?.showSnackBar(const SnackBar(content: Text("¡Guardado correctamente!")));
+        _showCentralFeedback("¡Guardado!", Icons.check_circle, Colors.green, onFinished: () {
+          if (mounted) Navigator.pop(context);
+        });
       }
 
-      await NotificationService.scheduleNotification(
-        id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone,
-        sound: settings.soundType, anticipationDays: _anticipationDays,
-      );
-
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      messengerKey.currentState?.showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-    }
+      await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
+      
+    } catch (e) { debugPrint("Error: $e"); }
   }
 
   @override
@@ -101,7 +132,6 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
     final theme = Theme.of(context);
     final settings = context.watch<AppSettings>();
     final isDark = settings.isDarkMode;
-    
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(title: Text(widget.taskToEdit != null ? "Editar" : "Nuevo")),
@@ -112,52 +142,19 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
           children: [
             Text("¿Qué recordar, ${settings.userName}?", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                hintText: "Ej: Tomar medicina...",
-                filled: true,
-                fillColor: isDark ? Colors.grey[900] : Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+            TextField(controller: _titleController, decoration: InputDecoration(hintText: "Ej: Tomar medicina...", filled: true, fillColor: isDark ? Colors.grey[900] : Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
             const SizedBox(height: 32),
-            Text("Anticipación (Días antes)", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
-            DropdownButton<int>(
-              value: _anticipationDays,
-              items: List.generate(8, (index) => DropdownMenuItem(value: index, child: Text(index == 0 ? "El mismo día" : "$index días antes"))),
-              onChanged: (val) => setState(() => _anticipationDays = val!),
-            ),
+            Text("Anticipación", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
+            DropdownButton<int>(value: _anticipationDays, items: List.generate(8, (index) => DropdownMenuItem(value: index, child: Text(index == 0 ? "El mismo día" : "$index días antes"))), onChanged: (val) => setState(() => _anticipationDays = val!)),
             const SizedBox(height: 32),
             Text("Foto", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
             const SizedBox(height: 12),
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 120, width: double.infinity,
-                decoration: BoxDecoration(color: isDark ? Colors.grey[900] : Colors.grey[100], borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.dividerColor)),
-                child: _selectedImage != null ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_selectedImage!, fit: BoxFit.cover)) : const Center(child: Icon(Icons.camera_alt)),
-              ),
-            ),
+            GestureDetector(onTap: _pickImage, child: Container(height: 120, width: double.infinity, decoration: BoxDecoration(color: isDark ? Colors.grey[900] : Colors.grey[100], borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.dividerColor)), child: _selectedImage != null ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_selectedImage!, fit: BoxFit.cover)) : const Center(child: Icon(Icons.camera_alt)))),
             const SizedBox(height: 32),
             Text("Fecha y Hora", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
             const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: Text(DateFormat('dd/MM/yyyy').format(_selectedDate)),
-              onTap: () async {
-                DateTime? picked = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime.now(), lastDate: DateTime(2030));
-                if (picked != null) setState(() => _selectedDate = picked);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.access_time),
-              title: Text(_selectedTime.format(context)),
-              onTap: () async {
-                TimeOfDay? picked = await showTimePicker(context: context, initialTime: _selectedTime);
-                if (picked != null) setState(() => _selectedTime = picked);
-              },
-            ),
+            ListTile(leading: const Icon(Icons.calendar_today), title: Text(DateFormat('dd/MM/yyyy').format(_selectedDate)), onTap: () async { DateTime? picked = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime.now(), lastDate: DateTime(2030)); if (picked != null) setState(() => _selectedDate = picked); }),
+            ListTile(leading: const Icon(Icons.access_time), title: Text(_selectedTime.format(context)), onTap: () async { TimeOfDay? picked = await showTimePicker(context: context, initialTime: _selectedTime); if (picked != null) setState(() => _selectedTime = picked); }),
             const SizedBox(height: 48),
             SizedBox(width: double.infinity, height: 60, child: ElevatedButton(onPressed: _saveTask, child: const Text("GUARDAR", style: TextStyle(fontWeight: FontWeight.bold)))),
           ],
