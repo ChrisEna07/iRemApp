@@ -15,7 +15,7 @@ class DBHelper {
     String path = join(await getDatabasesPath(), 'iremember_viviana.db');
     return await openDatabase(
       path,
-      version: 7, // Subimos a v7
+      version: 8, // Subimos a v8
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE tasks (
@@ -53,9 +53,8 @@ class DBHelper {
           await db.execute('ALTER TABLE tasks ADD COLUMN anticipationDays INTEGER DEFAULT 0');
           await db.execute('CREATE TABLE calculator_history (id INTEGER PRIMARY KEY AUTOINCREMENT, entry TEXT)');
         }
-        if (oldVersion < 7) {
-          await db.execute('ALTER TABLE finance_settings ADD COLUMN current_savings REAL DEFAULT 0');
-        }
+        if (oldVersion < 7) await db.execute('ALTER TABLE finance_settings ADD COLUMN current_savings REAL DEFAULT 0');
+        if (oldVersion < 8) await db.execute('ALTER TABLE finance_settings ADD COLUMN savings_goal_name TEXT DEFAULT "Mi Meta"');
       },
     );
   }
@@ -68,10 +67,10 @@ class DBHelper {
     ''');
     await db.execute('''
       CREATE TABLE finance_settings (
-        id INTEGER PRIMARY KEY, savings_goal REAL, total_income REAL, current_savings REAL DEFAULT 0
+        id INTEGER PRIMARY KEY, savings_goal REAL, total_income REAL, current_savings REAL DEFAULT 0, savings_goal_name TEXT DEFAULT "Mi Meta"
       )
     ''');
-    await db.insert('finance_settings', {'id': 1, 'savings_goal': 0, 'total_income': 0, 'current_savings': 0});
+    await db.insert('finance_settings', {'id': 1, 'savings_goal': 0, 'total_income': 0, 'current_savings': 0, 'savings_goal_name': 'Mi Meta'});
   }
 
   // --- MÉTODOS SISTEMA ---
@@ -81,47 +80,26 @@ class DBHelper {
     await db.delete('grocery');
     await db.delete('calculator_history');
     await db.delete('finance_transactions');
-    await db.update('finance_settings', {'savings_goal': 0, 'total_income': 0, 'current_savings': 0}, where: 'id = 1');
+    await db.update('finance_settings', {'savings_goal': 0, 'total_income': 0, 'current_savings': 0, 'savings_goal_name': 'Mi Meta'}, where: 'id = 1');
   }
 
   // --- MÉTODOS CALCULADORA ---
-  Future<void> addCalcHistory(String entry) async {
-    final db = await database;
-    await db.insert('calculator_history', {'entry': entry});
-  }
-  Future<List<String>> getCalcHistory() async {
-    final db = await database;
-    final res = await db.query('calculator_history', orderBy: 'id DESC');
-    return res.map((e) => e['entry'] as String).toList();
-  }
-  Future<void> clearCalcHistory() async {
-    final db = await database;
-    await db.delete('calculator_history');
-  }
+  Future<void> addCalcHistory(String entry) async { final db = await database; await db.insert('calculator_history', {'entry': entry}); }
+  Future<List<String>> getCalcHistory() async { final db = await database; final res = await db.query('calculator_history', orderBy: 'id DESC'); return res.map((e) => e['entry'] as String).toList(); }
+  Future<void> clearCalcHistory() async { final db = await database; await db.delete('calculator_history'); }
 
   // --- MÉTODOS FINANZAS ---
-  Future<void> addTransaction(String type, double amount, String category) async {
-    final db = await database;
-    await db.insert('finance_transactions', {'type': type, 'amount': amount, 'category': category, 'date': DateTime.now().toIso8601String()});
-  }
-  Future<List<Map<String, dynamic>>> getTransactions() async {
-    final db = await database;
-    return await db.query('finance_transactions', orderBy: 'date DESC');
-  }
-  Future<Map<String, dynamic>> getFinanceSettings() async {
-    final db = await database;
-    return (await db.query('finance_settings', where: 'id = 1')).first;
-  }
-  Future<void> updateFinanceSettings(double goal, double income, {double? currentSavings}) async {
+  Future<void> addTransaction(String type, double amount, String category) async { final db = await database; await db.insert('finance_transactions', {'type': type, 'amount': amount, 'category': category, 'date': DateTime.now().toIso8601String()}); }
+  Future<List<Map<String, dynamic>>> getTransactions() async { final db = await database; return await db.query('finance_transactions', orderBy: 'date DESC'); }
+  Future<Map<String, dynamic>> getFinanceSettings() async { final db = await database; return (await db.query('finance_settings', where: 'id = 1')).first; }
+  Future<void> updateFinanceSettings(double goal, double income, {double? currentSavings, String? goalName}) async {
     final db = await database;
     Map<String, dynamic> data = {'savings_goal': goal, 'total_income': income};
     if (currentSavings != null) data['current_savings'] = currentSavings;
+    if (goalName != null) data['savings_goal_name'] = goalName;
     await db.update('finance_settings', data, where: 'id = 1');
   }
-  Future<void> deleteTransaction(int id) async {
-    final db = await database;
-    await db.delete('finance_transactions', where: 'id = ?', whereArgs: [id]);
-  }
+  Future<void> deleteTransaction(int id) async { final db = await database; await db.delete('finance_transactions', where: 'id = ?', whereArgs: [id]); }
 
   // --- MÉTODOS TAREAS ---
   Future<int> insertTask(Task task) async { final db = await database; return await db.insert('tasks', task.toMap()); }

@@ -1,36 +1,72 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
-import 'services/notification_service.dart';
-import 'screens/home_screen.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'providers/app_settings.dart';
-
-final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey<ScaffoldMessengerState>();
+import 'screens/home_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
-  await initializeDateFormatting('es_VE', null);
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppSettings(),
-      child: const MyApp(),
+      child: const IRememberApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class IRememberApp extends StatelessWidget {
+  const IRememberApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
 
     return MaterialApp(
-      title: 'iRememberApp by ChrizDev',
-      scaffoldMessengerKey: messengerKey,
+      title: 'iRememberApp',
       debugShowCheckedModeBanner: false,
+      themeMode: settings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      
+      // TEMA CLARO PREMIUM
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blueAccent,
+          brightness: Brightness.light,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          titleTextStyle: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        cardTheme: CardTheme(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+
+      // TEMA OSCURO PREMIUM
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blueAccent,
+          brightness: Brightness.dark,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        cardTheme: CardTheme(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+
+      // LOCALIZACIÓN PARA FECHAS EN ESPAÑOL
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -38,37 +74,11 @@ class MyApp extends StatelessWidget {
       ],
       supportedLocales: const [
         Locale('es', 'VE'),
-        Locale('es', 'ES'),
         Locale('es', 'CO'),
+        Locale('en', 'US'),
       ],
-      locale: const Locale('es', 'VE'),
-      themeMode: settings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8),
-          primary: const Color(0xFF1A73E8),
-          secondary: const Color(0xFF9575CD),
-          surface: Colors.white,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1A73E8),
-          foregroundColor: Colors.white,
-          centerTitle: true,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8),
-          brightness: Brightness.dark,
-          primary: const Color(0xFF4285F4),
-          secondary: const Color(0xFFB39DDB),
-        ),
-      ),
-      // Aplicar el tamaño de letra globalmente
+
+      // ESCALADO GLOBAL DE FUENTE
       builder: (context, child) {
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(
@@ -77,6 +87,7 @@ class MyApp extends StatelessWidget {
           child: child!,
         );
       },
+
       home: const HomeScreen(),
     );
   }

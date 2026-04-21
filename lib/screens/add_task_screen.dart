@@ -50,8 +50,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       builder: (context) {
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (Navigator.canPop(context)) {
-            Navigator.pop(context); // Cierra el feedback
-            if (onFinished != null) onFinished(); // Luego ejecuta la acción (cerrar pantalla)
+            Navigator.pop(context);
+            if (onFinished != null) onFinished();
           }
         });
         return Center(
@@ -112,18 +112,18 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       if (widget.taskToEdit != null) {
         await _dbHelper.updateTask(task);
         id = task.id!;
+        // Programamos ANTES del feedback para asegurar que el servicio responda
+        await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
         _showCentralFeedback("¡Actualizado!", Icons.check_circle, Colors.blue, onFinished: () {
           if (mounted) Navigator.pop(context);
         });
       } else {
         id = await _dbHelper.insertTask(task);
+        await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
         _showCentralFeedback("¡Guardado!", Icons.check_circle, Colors.green, onFinished: () {
           if (mounted) Navigator.pop(context);
         });
       }
-
-      await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
-      
     } catch (e) { debugPrint("Error: $e"); }
   }
 
