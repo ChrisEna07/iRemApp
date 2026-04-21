@@ -39,8 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final DBHelper _dbHelper = DBHelper();
   int _tutorialStep = 0;
   bool _showingTutorial = false;
-  
-  // Filtro: 'Hoy', 'Mes', 'Año'
+  bool _onboardingInProgress = false; 
   String _activeFilter = 'Hoy';
 
   @override
@@ -60,9 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkFirstRun() async {
     final settings = context.read<AppSettings>();
-    if (!settings.hasSeenTutorial) {
+    // Solo actuamos si el sistema ya cargó los datos de persistencia
+    if (settings.isInitialized && !settings.hasSeenTutorial) {
       await _requestInitialPermissions();
-      setState(() => _showingTutorial = true);
+      setState(() {
+        _showingTutorial = true;
+        _onboardingInProgress = true;
+      });
     }
   }
 
@@ -77,19 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final db = await _dbHelper.database;
       List<Map<String, dynamic>> res;
       DateTime now = DateTime.now();
-      
-      if (_activeFilter == 'Hoy') {
-        String todayStr = now.toIso8601String().substring(0, 10);
-        res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$todayStr%']);
-      } else if (_activeFilter == 'Mes') {
-        String monthStr = now.toIso8601String().substring(0, 7);
-        res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$monthStr%']);
-      } else {
-        // Año
-        String yearStr = now.toIso8601String().substring(0, 4);
-        res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$yearStr%']);
-      }
-      
+      if (_activeFilter == 'Hoy') { String todayStr = now.toIso8601String().substring(0, 10); res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$todayStr%']); }
+      else if (_activeFilter == 'Mes') { String monthStr = now.toIso8601String().substring(0, 7); res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$monthStr%']); }
+      else { String yearStr = now.toIso8601String().substring(0, 4); res = await db.query('tasks', where: "dateTime LIKE ?", whereArgs: ['$yearStr%']); }
       setState(() => _tasks = res.map((e) => Task.fromMap(e)).toList());
     } catch (e) { debugPrint("Error: $e"); }
   }
@@ -100,9 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
       barrierColor: Colors.black.withOpacity(0.3),
       barrierDismissible: false,
       builder: (context) {
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          if (Navigator.canPop(context)) Navigator.pop(context);
-        });
+        Future.delayed(const Duration(milliseconds: 1500), () { if (Navigator.canPop(context)) Navigator.pop(context); });
         return Center(
           child: TweenAnimationBuilder(
             tween: Tween<double>(begin: 0.0, end: 1.0),
@@ -131,6 +122,67 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showInitialConfigDialog() {
+    final settings = context.read<AppSettings>();
+    final nameController = TextEditingController(text: settings.userName);
+    String selectedCurrency = settings.currency;
+    String selectedTimezone = settings.timezone;
+    bool isDark = settings.isDarkMode;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("¡Casi listo! 🛠️", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Configura tus preferencias iniciales para una mejor experiencia.", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 20),
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: "Tu Nombre", border: OutlineInputBorder())),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedCurrency,
+                  decoration: const InputDecoration(labelText: "Moneda", border: OutlineInputBorder()),
+                  items: const [DropdownMenuItem(value: 'USD', child: Text("Dólares (USD)")), DropdownMenuItem(value: 'COP', child: Text("Pesos (COP)")), DropdownMenuItem(value: 'VES', child: Text("Bolívares (VES)"))],
+                  onChanged: (val) => setDialogState(() => selectedCurrency = val!),
+                ),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedTimezone,
+                  decoration: const InputDecoration(labelText: "Zona Horaria", border: OutlineInputBorder()),
+                  items: const [DropdownMenuItem(value: 'America/Caracas', child: Text("Venezuela (VET)")), DropdownMenuItem(value: 'America/Bogota', child: Text("Colombia (COT)"))],
+                  onChanged: (val) => setDialogState(() => selectedTimezone = val!),
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile(title: const Text("Tema Oscuro"), value: isDark, onChanged: (val) => setDialogState(() => isDark = val)),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              onPressed: () async {
+                await settings.updateUser(nameController.text);
+                await settings.setCurrency(selectedCurrency);
+                await settings.setTimezone(selectedTimezone);
+                await settings.toggleDarkMode(isDark);
+                await settings.completeTutorial();
+                if (mounted) Navigator.pop(context);
+                setState(() => _onboardingInProgress = false);
+                _showCentralFeedback("¡Configurado!", Icons.stars, Colors.blue);
+              },
+              child: const Text("EMPEZAR AHORA"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _navigateToTool(String name, Widget target) {
     Navigator.push(context, MaterialPageRoute(builder: (context) => LoadingScreen(toolName: name, targetScreen: target)));
   }
@@ -152,7 +204,11 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: () {
         setState(() {
           if (_tutorialStep < steps.length - 1) { _tutorialStep++; } 
-          else { _showingTutorial = false; _tutorialStep = 0; context.read<AppSettings>().completeTutorial(); }
+          else { 
+            _showingTutorial = false; 
+            _tutorialStep = 0; 
+            _showInitialConfigDialog(); 
+          }
         });
       },
       child: Container(
@@ -178,7 +234,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = context.watch<AppSettings>();
-    if (!settings.hasSeenTutorial && !_showingTutorial) { WidgetsBinding.instance.addPostFrameCallback((_) { setState(() => _showingTutorial = true); }); }
+
+    if (settings.isInitialized && !settings.hasSeenTutorial && !_showingTutorial && !_onboardingInProgress) { 
+      WidgetsBinding.instance.addPostFrameCallback((_) { setState(() { _showingTutorial = true; _onboardingInProgress = true; }); }); 
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -219,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              // CHIPS DE FILTRADO
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -273,15 +331,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFilterChip(String label) {
     bool isSelected = _activeFilter == label;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (val) {
-        if (val) {
-          setState(() => _activeFilter = label);
-          _loadTasks();
-        }
-      },
-    );
+    return ChoiceChip(label: Text(label), selected: isSelected, onSelected: (val) { if (val) { setState(() => _activeFilter = label); _loadTasks(); } });
   }
 }

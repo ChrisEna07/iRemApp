@@ -6,19 +6,20 @@ class AppSettings extends ChangeNotifier {
   String _userName = "Usuario";
   bool _hasSeenTutorial = false;
   String _timezone = "America/Caracas";
+  bool _isInitialized = false; // Nueva bandera de inicialización
   
   double _rateVES = 44.50;
   double _rateCOP = 3600.0;
   String _soundType = "standard";
 
-  // --- NUEVAS PREFERENCIAS ---
   String _currency = "USD"; // USD, COP, VES
-  double _fontSizeFactor = 1.0; // 0.8 (Pequeña), 1.0 (Mediana), 1.2 (Grande)
+  double _fontSizeFactor = 1.0;
 
   bool get isDarkMode => _isDarkMode;
   String get userName => _userName;
   bool get hasSeenTutorial => _hasSeenTutorial;
   String get timezone => _timezone;
+  bool get isInitialized => _isInitialized;
   double get rateVES => _rateVES;
   double get rateCOP => _rateCOP;
   String get soundType => _soundType;
@@ -40,6 +41,8 @@ class AppSettings extends ChangeNotifier {
     _soundType = prefs.getString('soundType') ?? "standard";
     _currency = prefs.getString('currency') ?? "USD";
     _fontSizeFactor = prefs.getDouble('fontSizeFactor') ?? 1.0;
+    
+    _isInitialized = true; // Ahora sabemos que los datos reales están cargados
     notifyListeners();
   }
 
@@ -73,10 +76,24 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleDarkMode(bool val) async {
+    _isDarkMode = val;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', _isDarkMode);
+    notifyListeners();
+  }
+
   Future<void> toggleTheme() async {
     _isDarkMode = !_isDarkMode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', _isDarkMode);
+    notifyListeners();
+  }
+
+  Future<void> updateUser(String name) async {
+    _userName = name;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userName', _userName);
     notifyListeners();
   }
 
