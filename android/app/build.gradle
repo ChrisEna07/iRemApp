@@ -1,0 +1,45 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // El plugin de Flutter debe ir después de Android y Kotlin
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.chrizdev.iremember_app"
+    compileSdk = 35 // Actualizado a 35 para soportar las librerías de cámara y ciclo de vida
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
+    defaultConfig {
+        applicationId = "com.chrizdev.iremember_app"
+        
+        // minSdk en 21 garantiza que funcione en el Moto G3 (Android 5.0+)
+        minSdk = 21 
+        
+        // targetSdk en 35 para cumplir con las últimas políticas de Google Play y plugins
+        targetSdk = 35 
+        
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // Configuración de firma para el build de producción
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
