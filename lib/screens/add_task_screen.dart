@@ -83,13 +83,22 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50);
-    if (image != null) setState(() => _selectedImage = File(image.path));
+    try {
+      final source = (!kIsWeb && Platform.isLinux) ? ImageSource.gallery : ImageSource.camera;
+      final XFile? image = await _picker.pickImage(source: source, imageQuality: 50);
+      if (image != null) setState(() => _selectedImage = File(image.path));
+    } catch (e) {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+      if (image != null) setState(() => _selectedImage = File(image.path));
+    }
   }
 
   Future<void> _saveTask() async {
     final settings = context.read<AppSettings>();
-    if (_titleController.text.isEmpty) return;
+    if (_titleController.text.isEmpty) {
+      _showCentralFeedback("¡Escribe un título!", Icons.warning, Colors.orange);
+      return;
+    }
     if (kIsWeb) return;
 
     final DateTime scheduledDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedTime.hour, _selectedTime.minute);
@@ -112,19 +121,42 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
       if (widget.taskToEdit != null) {
         await _dbHelper.updateTask(task);
         id = task.id!;
-        // Programamos ANTES del feedback para asegurar que el servicio responda
-        await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
+        
+        try {
+          await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
+          await NotificationService.showImmediatePush(_titleController.text, scheduledDateTime);
+        } catch (e) {
+          debugPrint("Error scheduling notification: $e");
+        }
+
         _showCentralFeedback("¡Actualizado!", Icons.check_circle, Colors.blue, onFinished: () {
           if (mounted) Navigator.pop(context);
         });
       } else {
         id = await _dbHelper.insertTask(task);
-        await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
+        
+        try {
+          await NotificationService.scheduleNotification(id, "¡${settings.userName}, es hora!", _titleController.text, scheduledDateTime, settings.timezone, sound: settings.soundType, anticipationDays: _anticipationDays);
+          await NotificationService.showImmediatePush(_titleController.text, scheduledDateTime);
+        } catch (e) {
+          debugPrint("Error scheduling notification: $e");
+        }
+
         _showCentralFeedback("¡Guardado!", Icons.check_circle, Colors.green, onFinished: () {
           if (mounted) Navigator.pop(context);
         });
       }
-    } catch (e) { debugPrint("Error: $e"); }
+    } catch (e) { 
+      debugPrint("Error saving task: $e");
+      _showCentralFeedback("Error al guardar", Icons.error_outline, Colors.red);
+    }
+  }
+
+  // Formato normal 12h con AM/PM
+  String _formatTime(TimeOfDay time) {
+    final now = DateTime.now();
+    final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateFormat('hh:mm a').format(dt);
   }
 
   @override
@@ -149,12 +181,28 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
             const SizedBox(height: 32),
             Text("Foto", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
             const SizedBox(height: 12),
-            GestureDetector(onTap: _pickImage, child: Container(height: 120, width: double.infinity, decoration: BoxDecoration(color: isDark ? Colors.grey[900] : Colors.grey[100], borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.dividerColor)), child: _selectedImage != null ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_selectedImage!, fit: BoxFit.cover)) : const Center(child: Icon(Icons.camera_alt)))),
+            GestureDetector(onTap: _pickImage, child: Container(height: 120, width: double.infinity, decoration: BoxDecoration(color: isDark ? Colors.grey[900] : Colors.grey[100], borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.dividerColor)), child: _selectedImage != null ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_selectedImage!, fit: BoxFit.cover)) : Center(child: Icon((!kIsWeb && Platform.isLinux) ? Icons.image : Icons.camera_alt)))),
             const SizedBox(height: 32),
             Text("Fecha y Hora", style: TextStyle(fontWeight: FontWeight.bold, color: theme.hintColor)),
             const SizedBox(height: 12),
             ListTile(leading: const Icon(Icons.calendar_today), title: Text(DateFormat('dd/MM/yyyy').format(_selectedDate)), onTap: () async { DateTime? picked = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime.now(), lastDate: DateTime(2030)); if (picked != null) setState(() => _selectedDate = picked); }),
-            ListTile(leading: const Icon(Icons.access_time), title: Text(_selectedTime.format(context)), onTap: () async { TimeOfDay? picked = await showTimePicker(context: context, initialTime: _selectedTime); if (picked != null) setState(() => _selectedTime = picked); }),
+            ListTile(
+              leading: const Icon(Icons.access_time), 
+              title: Text(_formatTime(_selectedTime)), 
+              onTap: () async { 
+                TimeOfDay? picked = await showTimePicker(
+                  context: context, 
+                  initialTime: _selectedTime,
+                  builder: (context, child) {
+                    return MediaQuery(
+                      data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+                      child: child!,
+                    );
+                  }
+                ); 
+                if (picked != null) setState(() => _selectedTime = picked); 
+              }
+            ),
             const SizedBox(height: 48),
             SizedBox(width: double.infinity, height: 60, child: ElevatedButton(onPressed: _saveTask, child: const Text("GUARDAR", style: TextStyle(fontWeight: FontWeight.bold)))),
           ],

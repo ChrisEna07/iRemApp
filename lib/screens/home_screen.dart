@@ -4,11 +4,11 @@ import 'dart:async';
 import 'dart:math';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../database/db_helper.dart';
 import '../models/task_model.dart';
 import '../providers/app_settings.dart';
+import '../services/notification_service.dart'; 
 import 'add_task_screen.dart';
 import 'settings_screen.dart';
 import 'tools/grocery_list_screen.dart';
@@ -59,19 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkFirstRun() async {
     final settings = context.read<AppSettings>();
-    // Solo actuamos si el sistema ya cargó los datos de persistencia
-    if (settings.isInitialized && !settings.hasSeenTutorial) {
-      await _requestInitialPermissions();
+    if (!settings.hasSeenTutorial) {
+      await NotificationService.requestAllPermissions();
       setState(() {
         _showingTutorial = true;
         _onboardingInProgress = true;
       });
     }
-  }
-
-  Future<void> _requestInitialPermissions() async {
-    await Permission.notification.request();
-    await Permission.camera.request();
   }
 
   Future<void> _loadTasks() async {
@@ -127,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final nameController = TextEditingController(text: settings.userName);
     String selectedCurrency = settings.currency;
     String selectedTimezone = settings.timezone;
+    String selectedCountry = settings.country;
     bool isDark = settings.isDarkMode;
 
     showDialog(
@@ -140,9 +135,16 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Configura tus preferencias iniciales para una mejor experiencia.", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                const Text("Configura tus preferencias iniciales.", style: TextStyle(fontSize: 13, color: Colors.grey)),
                 const SizedBox(height: 20),
                 TextField(controller: nameController, decoration: const InputDecoration(labelText: "Tu Nombre", border: OutlineInputBorder())),
+                const SizedBox(height: 15),
+                DropdownButtonFormField<String>(
+                  value: selectedCountry,
+                  decoration: const InputDecoration(labelText: "País (Festivos)", border: OutlineInputBorder()),
+                  items: const [DropdownMenuItem(value: 'Venezuela', child: Text("Venezuela 🇻🇪")), DropdownMenuItem(value: 'Colombia', child: Text("Colombia 🇨🇴"))],
+                  onChanged: (val) => setDialogState(() => selectedCountry = val!),
+                ),
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   value: selectedCurrency,
@@ -164,9 +166,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           actions: [
             ElevatedButton(
-              style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               onPressed: () async {
                 await settings.updateUser(nameController.text);
+                await settings.setCountry(selectedCountry);
                 await settings.setCurrency(selectedCurrency);
                 await settings.setTimezone(selectedTimezone);
                 await settings.toggleDarkMode(isDark);
@@ -215,10 +217,11 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.black.withOpacity(0.85),
         child: Stack(
           children: [
+            if (_tutorialStep == 0) _buildArrow(top: 180, left: MediaQuery.of(context).size.width / 2 - 25, angle: 0), // Flecha para versículos
             if (_tutorialStep == 1) _buildArrow(top: 40, left: 20, angle: -pi / 4),
             if (_tutorialStep == 2) _buildArrow(top: 40, right: 20, angle: pi / 4),
             if (_tutorialStep == 3) _buildArrow(bottom: 70, right: 30, angle: 3 * pi / 4),
-            if (_tutorialStep == 4) _buildArrow(bottom: 150, left: MediaQuery.of(context).size.width / 2 - 25, angle: pi),
+            if (_tutorialStep == 4) _buildArrow(top: 350, left: MediaQuery.of(context).size.width / 2 - 25, angle: 0), // Flecha para recordatorios
             Center(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 40.0), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)), child: Text(steps[_tutorialStep]["text"] as String, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold, decoration: TextDecoration.none, fontFamily: 'Roboto'))), const SizedBox(height: 20), const Text("(Toca para continuar)", style: TextStyle(color: Colors.white70, fontSize: 14, decoration: TextDecoration.none))]))),
           ],
         ),

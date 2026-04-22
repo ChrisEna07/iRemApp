@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart';
 import '../models/task_model.dart';
 
 class DBHelper {
@@ -12,10 +15,28 @@ class DBHelper {
   }
 
   Future<Database> initDB() async {
-    String path = join(await getDatabasesPath(), 'iremember_viviana.db');
+    // Inicialización para Desktop (Linux/Windows)
+    if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
+    String path;
+    if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      final dbPath = await getDatabasesPath();
+      // Aseguramos que el directorio exista
+      final directory = Directory(dbPath);
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      path = join(dbPath, 'iremember_viviana.db');
+    } else {
+      path = join(await getDatabasesPath(), 'iremember_viviana.db');
+    }
+
     return await openDatabase(
       path,
-      version: 8, // Subimos a v8
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE tasks (
@@ -73,7 +94,6 @@ class DBHelper {
     await db.insert('finance_settings', {'id': 1, 'savings_goal': 0, 'total_income': 0, 'current_savings': 0, 'savings_goal_name': 'Mi Meta'});
   }
 
-  // --- MÉTODOS SISTEMA ---
   Future<void> clearAllData() async {
     final db = await database;
     await db.delete('tasks');
@@ -83,12 +103,10 @@ class DBHelper {
     await db.update('finance_settings', {'savings_goal': 0, 'total_income': 0, 'current_savings': 0, 'savings_goal_name': 'Mi Meta'}, where: 'id = 1');
   }
 
-  // --- MÉTODOS CALCULADORA ---
   Future<void> addCalcHistory(String entry) async { final db = await database; await db.insert('calculator_history', {'entry': entry}); }
   Future<List<String>> getCalcHistory() async { final db = await database; final res = await db.query('calculator_history', orderBy: 'id DESC'); return res.map((e) => e['entry'] as String).toList(); }
   Future<void> clearCalcHistory() async { final db = await database; await db.delete('calculator_history'); }
 
-  // --- MÉTODOS FINANZAS ---
   Future<void> addTransaction(String type, double amount, String category) async { final db = await database; await db.insert('finance_transactions', {'type': type, 'amount': amount, 'category': category, 'date': DateTime.now().toIso8601String()}); }
   Future<List<Map<String, dynamic>>> getTransactions() async { final db = await database; return await db.query('finance_transactions', orderBy: 'date DESC'); }
   Future<Map<String, dynamic>> getFinanceSettings() async { final db = await database; return (await db.query('finance_settings', where: 'id = 1')).first; }
@@ -101,7 +119,6 @@ class DBHelper {
   }
   Future<void> deleteTransaction(int id) async { final db = await database; await db.delete('finance_transactions', where: 'id = ?', whereArgs: [id]); }
 
-  // --- MÉTODOS TAREAS ---
   Future<int> insertTask(Task task) async { final db = await database; return await db.insert('tasks', task.toMap()); }
   Future<int> updateTask(Task task) async { final db = await database; return await db.update('tasks', task.toMap(), where: 'id = ?', whereArgs: [task.id]); }
   Future<List<Task>> getTasksByDay(String day) async { final db = await database; final List<Map<String, dynamic>> maps = await db.query('tasks', where: 'dayOfWeek = ?', whereArgs: [day]); return List.generate(maps.length, (i) => Task.fromMap(maps[i])); }
@@ -109,7 +126,6 @@ class DBHelper {
   Future<int> updateTaskStatus(int id, bool isDone) async { final db = await database; return await db.update('tasks', {'isDone': isDone ? 1 : 0}, where: 'id = ?', whereArgs: [id]); }
   Future<int> deleteTask(int id) async { final db = await database; return await db.delete('tasks', where: 'id = ?', whereArgs: [id]); }
 
-  // --- MÉTODOS GROCERY ---
   Future<int> insertGrocery(String item) async { final db = await database; return await db.insert('grocery', {'item': item, 'isDone': 0}); }
   Future<List<Map<String, dynamic>>> getGroceries() async { final db = await database; return await db.query('grocery'); }
   Future<int> updateGroceryStatus(int id, bool isDone) async { final db = await database; return await db.update('grocery', {'isDone': isDone ? 1 : 0}, where: 'id = ?', whereArgs: [id]); }

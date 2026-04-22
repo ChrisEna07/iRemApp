@@ -138,6 +138,14 @@ class _FinanceScreenContentState extends State<_FinanceScreenContent> {
               onPressed: isSaving ? null : () async {
                 double amount = double.tryParse(amountController.text) ?? 0;
                 if (amount <= 0) return;
+
+                // VALIDACIÓN DE META
+                if (type == 'income' && goToGoal && _savingsGoal <= 0) {
+                  Navigator.pop(context);
+                  _showNoGoalError(amount);
+                  return;
+                }
+
                 setDialogState(() => isSaving = true);
                 try {
                   if (type == 'income') {
@@ -162,6 +170,26 @@ class _FinanceScreenContentState extends State<_FinanceScreenContent> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showNoGoalError(double amount) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("¡Sin Meta Activa!"),
+        content: const Text("No puedes destinar dinero a una meta si aún no has definido ninguna. ¿Qué deseas hacer?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
+          ElevatedButton(onPressed: () { Navigator.pop(context); _setGoalDialog(); }, child: const Text("CREAR META")),
+          ElevatedButton(onPressed: () async {
+            await _dbHelper.updateFinanceSettings(_savingsGoal, _totalIncome + amount, currentSavings: _currentSavings, goalName: _goalName);
+            Navigator.pop(context);
+            _showCentralFeedback("¡Añadido a Ingresos!", Icons.attach_money, Colors.blue);
+            _loadData();
+          }, child: const Text("USAR COMO INGRESO")),
+        ],
       ),
     );
   }
@@ -202,6 +230,53 @@ class _FinanceScreenContentState extends State<_FinanceScreenContent> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showTransactionDetail(Map<String, dynamic> t) {
+    final appSettings = context.read<AppSettings>();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Detalle de Movimiento"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(t['type'] == 'income' ? Icons.arrow_upward : Icons.arrow_downward, size: 60, color: t['type'] == 'income' ? Colors.green : Colors.red),
+            const SizedBox(height: 15),
+            Text(_formatCurrency(t['amount'], appSettings.currency), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _detailRow("Fecha:", t['date'].substring(0, 16).replaceAll('T', ' ')),
+            _detailRow("Tipo:", t['type'] == 'income' ? "Ingreso" : "Gasto"),
+            _detailRow("Destino:", _getCategoryName(t['category'])),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CERRAR")),
+          TextButton(onPressed: () async {
+            await _dbHelper.deleteTransaction(t['id']);
+            Navigator.pop(context);
+            _showCentralFeedback("¡Eliminado!", Icons.delete, Colors.red);
+            _loadData();
+          }, child: const Text("ELIMINAR", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+  }
+
+  String _getCategoryName(String cat) {
+    if (cat == 'needs') return "Necesidades (50%)";
+    if (cat == 'wants') return "Gustos (30%)";
+    if (cat == 'savings') return "Ahorro/Deuda (20%)";
+    if (cat == 'goal') return "Meta de Ahorro";
+    return "Ingreso General";
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(color: Colors.grey)), Text(value, style: const TextStyle(fontWeight: FontWeight.bold))]),
     );
   }
 
@@ -321,11 +396,11 @@ class _FinanceScreenContentState extends State<_FinanceScreenContent> {
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
-                          leading: Icon(Icons.receipt_long, color: t['category'] == 'needs' ? Colors.blue : t['category'] == 'wants' ? Colors.orange : Colors.purple),
-                          title: Text(t['category'] == 'needs' ? "Necesidad" : t['category'] == 'wants' ? "Gusto" : "Ahorro"),
+                          leading: Icon(t['type'] == 'income' ? Icons.add_circle_outline : Icons.receipt_long, color: t['type'] == 'income' ? Colors.green : (t['category'] == 'needs' ? Colors.blue : t['category'] == 'wants' ? Colors.orange : Colors.purple)),
+                          title: Text(t['type'] == 'income' ? "Ingreso" : (t['category'] == 'needs' ? "Necesidad" : t['category'] == 'wants' ? "Gusto" : "Ahorro")),
                           subtitle: Text(t['date'].substring(0, 10)),
-                          trailing: Text("-${_formatCurrency(t['amount'], appSettings.currency)}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                          onLongPress: () async { await _dbHelper.deleteTransaction(t['id']); _loadData(); },
+                          trailing: Text("${t['type'] == 'income' ? '+' : '-'}${_formatCurrency(t['amount'], appSettings.currency)}", style: TextStyle(fontWeight: FontWeight.bold, color: t['type'] == 'income' ? Colors.green : Colors.red)),
+                          onTap: () => _showTransactionDetail(t),
                         ),
                       );
                     },

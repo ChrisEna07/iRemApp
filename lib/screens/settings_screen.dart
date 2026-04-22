@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart' as p;
 import '../providers/app_settings.dart';
 import '../database/db_helper.dart';
+import '../services/notification_service.dart';
+import 'developer_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,131 +13,230 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final TextEditingController _nameController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController.text = context.read<AppSettings>().userName;
-  }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
-    
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text("Configuración")),
       body: ListView(
-        padding: const EdgeInsets.all(20),
         children: [
-          const Text("PERFIL", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: "Tu nombre", border: OutlineInputBorder()),
-            onChanged: (val) => settings.setUserName(val),
-          ),
-          const SizedBox(height: 20),
-          const Text("ZONA HORARIA", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          DropdownButtonFormField<String>(
-            value: settings.timezone,
-            items: const [
-              DropdownMenuItem(value: "America/Caracas", child: Text("Venezuela (Caracas)")),
-              DropdownMenuItem(value: "America/Bogota", child: Text("Colombia (Bogotá)")),
-            ],
-            onChanged: (val) => settings.setTimezone(val!),
-          ),
-          const SizedBox(height: 30),
-          const Text("SISTEMA Y MONEDA", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: settings.currency,
-            decoration: const InputDecoration(labelText: "Moneda de Finanzas", border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: "USD", child: Text("Dólar (USD)")),
-              DropdownMenuItem(value: "COP", child: Text("Peso Colombiano (COP)")),
-              DropdownMenuItem(value: "VES", child: Text("Bolívar (VES)")),
-            ],
-            onChanged: (val) => settings.setCurrency(val!),
-          ),
-          const SizedBox(height: 20),
-          const Text("TAMAÑO DE LETRA", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ChoiceChip(
-                label: const Text("Pequeña"),
-                selected: settings.fontSizeFactor == 0.8,
-                onSelected: (val) => settings.setFontSize(0.8),
-              ),
-              ChoiceChip(
-                label: const Text("Mediana"),
-                selected: settings.fontSizeFactor == 1.0,
-                onSelected: (val) => settings.setFontSize(1.0),
-              ),
-              ChoiceChip(
-                label: const Text("Grande"),
-                selected: settings.fontSizeFactor == 1.2,
-                onSelected: (val) => settings.setFontSize(1.2),
-              ),
-            ],
-          ),
-          const SizedBox(height: 30),
-          const Text("NOTIFICACIONES", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: settings.soundType,
-            decoration: const InputDecoration(labelText: "Sonido de Alerta", border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: "standard", child: Text("Estándar (Suave)")),
-              DropdownMenuItem(value: "alarm", child: Text("Alarma (Fuerte)")),
-            ],
-            onChanged: (val) => settings.setSoundType(val!),
-          ),
-          const SizedBox(height: 30),
-          const Text("APARIENCIA", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-          SwitchListTile(
-            title: const Text("Modo Noche"),
-            value: settings.isDarkMode,
-            onChanged: (val) => settings.toggleTheme(),
-          ),
-          const SizedBox(height: 30),
+          _buildSectionTitle("Personalización"),
           ListTile(
-            leading: const Icon(Icons.play_circle_outline, color: Colors.purple),
+            leading: const Icon(Icons.person),
+            title: const Text("Nombre de Usuario"),
+            subtitle: Text(settings.userName),
+            onTap: () => _showEditNameDialog(context, settings),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.dark_mode),
+            title: const Text("Modo Oscuro"),
+            value: settings.isDarkMode,
+            onChanged: (val) => settings.toggleDarkMode(val),
+          ),
+          ListTile(
+            leading: const Icon(Icons.text_fields),
+            title: const Text("Tamaño de Letra"),
+            subtitle: Text(_getFontSizeLabel(settings.fontSizeFactor)),
+            onTap: () => _showFontSizeDialog(context, settings),
+          ),
+          
+          _buildSectionTitle("Preferencias"),
+          ListTile(
+            leading: const Icon(Icons.location_on),
+            title: const Text("País (Festivos)"),
+            subtitle: Text(settings.country),
+            onTap: () => _showCountryDialog(context, settings),
+          ),
+          ListTile(
+            leading: const Icon(Icons.monetization_on),
+            title: const Text("Moneda"),
+            subtitle: Text(settings.currency),
+            onTap: () => _showCurrencyDialog(context, settings),
+          ),
+          ListTile(
+            leading: const Icon(Icons.volume_up),
+            title: const Text("Tipo de Sonido"),
+            subtitle: Text(settings.soundType == 'alarm' ? "Alarma Fuerte" : "Estándar Suave"),
+            onTap: () => _showSoundDialog(context, settings),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_active, color: Colors.green),
+            title: const Text("Probar Notificación", style: TextStyle(color: Colors.green)),
+            subtitle: const Text("Verifica sonido y aviso central"),
+            onTap: () async {
+              await NotificationService.testNotification();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.public),
+            title: const Text("Zona Horaria"),
+            subtitle: Text(settings.timezone),
+            onTap: () => _showTimezoneDialog(context, settings),
+          ),
+
+          _buildSectionTitle("Sistema"),
+          ListTile(
+            leading: const Icon(Icons.help_outline),
             title: const Text("Ver Tutorial"),
             onTap: () async {
               await settings.resetTutorial();
-              Navigator.pop(context);
+              Navigator.pop(context); 
             },
           ),
           ListTile(
-            leading: const Icon(Icons.info_outline, color: Colors.blue),
-            title: const Text("Créditos"),
-            onTap: () {
-              showDialog(context: context, builder: (context) => const AlertDialog(title: Text("Créditos"), content: Text("Christian Romero (ChrizDev)")));
-            },
+            leading: const Icon(Icons.admin_panel_settings, color: Colors.blue),
+            title: const Text("Modo Super Desarrollador", style: TextStyle(color: Colors.blue)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DeveloperScreen())),
           ),
-          const SizedBox(height: 50),
-          Center(
-            child: TextButton(
-              onPressed: () {
-                final pass = TextEditingController();
-                showDialog(context: context, builder: (context) => AlertDialog(
-                  title: const Text("Dev Mode"),
-                  content: TextField(controller: pass, obscureText: true),
-                  actions: [TextButton(onPressed: () {
-                    if (pass.text == "ChrizDev3008") {
-                      Navigator.pop(context);
-                      DBHelper().clearAllData();
-                    }
-                  }, child: const Text("BORRAR TODO"))]
-                ));
-              },
-              child: const Text("SUPER DESARROLLADOR", style: TextStyle(fontSize: 10, color: Colors.grey)),
-            ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text("iRememberApp v1.0.8\nDesarrollado por ChrizDev", textAlign: TextAlign.center, style: TextStyle(color: theme.hintColor, fontSize: 12)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+    );
+  }
+
+  String _getFontSizeLabel(double factor) {
+    if (factor < 1.0) return "Pequeña";
+    if (factor > 1.0) return "Grande";
+    return "Mediana";
+  }
+
+  void _showEditNameDialog(BuildContext context, AppSettings settings) {
+    final controller = TextEditingController(text: settings.userName);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Cambiar Nombre"),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: "Nombre")),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
+          TextButton(onPressed: () { settings.setUserName(controller.text); Navigator.pop(context); }, child: const Text("GUARDAR")),
+        ],
+      ),
+    );
+  }
+
+  void _showFontSizeDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Tamaño de Letra"),
+        children: [
+          _fontSizeOption(context, settings, "Pequeña", 0.8),
+          _fontSizeOption(context, settings, "Mediana", 1.0),
+          _fontSizeOption(context, settings, "Grande", 1.2),
+        ],
+      ),
+    );
+  }
+
+  Widget _fontSizeOption(BuildContext context, AppSettings settings, String label, double factor) {
+    return RadioListTile<double>(
+      title: Text(label),
+      value: factor,
+      groupValue: settings.fontSizeFactor,
+      onChanged: (val) { settings.setFontSize(val!); Navigator.pop(context); },
+    );
+  }
+
+  void _showCountryDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Seleccionar País"),
+        children: [
+          _countryOption(context, settings, "Colombia 🇨🇴", "Colombia"),
+          _countryOption(context, settings, "Venezuela 🇻🇪", "Venezuela"),
+        ],
+      ),
+    );
+  }
+
+  Widget _countryOption(BuildContext context, AppSettings settings, String label, String value) {
+    return RadioListTile<String>(
+      title: Text(label),
+      value: value,
+      groupValue: settings.country,
+      onChanged: (val) { settings.setCountry(val!); Navigator.pop(context); },
+    );
+  }
+
+  void _showCurrencyDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Seleccionar Moneda"),
+        children: [
+          _currencyOption(context, settings, "Dólares (USD)", "USD"),
+          _currencyOption(context, settings, "Pesos (COP)", "COP"),
+          _currencyOption(context, settings, "Bolívares (VES)", "VES"),
+        ],
+      ),
+    );
+  }
+
+  Widget _currencyOption(BuildContext context, AppSettings settings, String label, String value) {
+    return RadioListTile<String>(
+      title: Text(label),
+      value: value,
+      groupValue: settings.currency,
+      onChanged: (val) { settings.setCurrency(val!); Navigator.pop(context); },
+    );
+  }
+
+  void _showSoundDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Tipo de Sonido"),
+        children: [
+          _soundOption(context, settings, "Estándar Suave", "standard"),
+          _soundOption(context, settings, "Alarma Fuerte", "alarm"),
+        ],
+      ),
+    );
+  }
+
+  Widget _soundOption(BuildContext context, AppSettings settings, String label, String value) {
+    return RadioListTile<String>(
+      title: Text(label),
+      value: value,
+      groupValue: settings.soundType,
+      onChanged: (val) { settings.setSoundType(val!); Navigator.pop(context); },
+    );
+  }
+
+  void _showTimezoneDialog(BuildContext context, AppSettings settings) {
+    showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Zona Horaria"),
+        children: [
+          _tzOption(context, settings, "Venezuela (VET)", "America/Caracas"),
+          _tzOption(context, settings, "Colombia (COT)", "America/Bogota"),
+        ],
+      ),
+    );
+  }
+
+  Widget _tzOption(BuildContext context, AppSettings settings, String label, String value) {
+    return RadioListTile<String>(
+      title: Text(label),
+      value: value,
+      groupValue: settings.timezone,
+      onChanged: (val) { settings.setTimezone(val!); Navigator.pop(context); },
     );
   }
 }

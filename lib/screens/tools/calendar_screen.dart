@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../database/db_helper.dart';
 import '../../models/task_model.dart';
 import '../add_task_screen.dart';
+import '../../providers/app_settings.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -17,15 +19,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
   final DBHelper _dbHelper = DBHelper();
   List<Task> _dayTasks = [];
-  Set<String> _daysWithTasks = {}; // Almacena fechas en formato YYYY-MM-DD
+  Set<String> _daysWithTasks = {}; 
 
-  final Map<DateTime, String> _specialDates = {
-    DateTime(2026, 1, 1): "Año Nuevo",
-    DateTime(2026, 4, 19): "Independencia (VE)",
-    DateTime(2026, 7, 5): "Firma Acta (VE)",
-    DateTime(2026, 7, 20): "Independencia (CO)",
-    DateTime(2026, 8, 7): "Batalla de Boyacá (CO)",
-    DateTime(2026, 12, 25): "Navidad",
+  // Listas de festivos por país
+  final Map<String, Map<DateTime, String>> _countryHolidays = {
+    "Venezuela": {
+      DateTime(2026, 1, 1): "Año Nuevo",
+      DateTime(2026, 2, 16): "Carnaval",
+      DateTime(2026, 2, 17): "Carnaval",
+      DateTime(2026, 4, 2): "Jueves Santo",
+      DateTime(2026, 4, 3): "Viernes Santo",
+      DateTime(2026, 4, 19): "Declaración de Independencia",
+      DateTime(2026, 5, 1): "Día del Trabajador",
+      DateTime(2026, 6, 24): "Batalla de Carabobo",
+      DateTime(2026, 7, 5): "Día de la Independencia",
+      DateTime(2026, 7, 24): "Natalicio de Simón Bolívar",
+      DateTime(2026, 10, 12): "Resistencia Indígena",
+      DateTime(2026, 12, 24): "Nochebuena",
+      DateTime(2026, 12, 25): "Navidad",
+      DateTime(2026, 12, 31): "Fin de Año",
+    },
+    "Colombia": {
+      DateTime(2026, 1, 1): "Año Nuevo",
+      DateTime(2026, 1, 12): "Día de los Reyes Magos",
+      DateTime(2026, 3, 23): "Día de San José",
+      DateTime(2026, 4, 2): "Jueves Santo",
+      DateTime(2026, 4, 3): "Viernes Santo",
+      DateTime(2026, 5, 1): "Día del Trabajo",
+      DateTime(2026, 5, 25): "Ascensión del Señor",
+      DateTime(2026, 6, 15): "Corpus Christi",
+      DateTime(2026, 6, 22): "Sagrado Corazón",
+      DateTime(2026, 6, 29): "San Pedro y San Pablo",
+      DateTime(2026, 7, 20): "Día de la Independencia",
+      DateTime(2026, 8, 7): "Batalla de Boyacá",
+      DateTime(2026, 8, 17): "Asunción de la Virgen",
+      DateTime(2026, 10, 12): "Día de la Raza",
+      DateTime(2026, 11, 2): "Día de Todos los Santos",
+      DateTime(2026, 11, 16): "Independencia de Cartagena",
+      DateTime(2026, 12, 8): "Inmaculada Concepción",
+      DateTime(2026, 12, 25): "Navidad",
+    }
   };
 
   @override
@@ -37,8 +70,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _loadAllTaskDays() async {
-    // Cargamos todas las tareas para marcar los días en el calendario
-    // En una app real, podrías filtrar por mes, pero para Viviana cargamos todo
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> res = await db.query('tasks');
     final Set<String> markedDays = {};
@@ -55,6 +86,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<AppSettings>();
+    final holidays = _countryHolidays[settings.country] ?? {};
+
     return Scaffold(
       appBar: AppBar(title: const Text("Calendario Personal")),
       body: Column(
@@ -78,8 +112,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 final List<Widget> markers = [];
 
                 // Marcador para festivos (Rojo)
-                DateTime specialKey = DateTime(date.year, date.month, date.day);
-                if (_specialDates.containsKey(specialKey)) {
+                DateTime holidayKey = DateTime(date.year, date.month, date.day);
+                if (holidays.containsKey(holidayKey)) {
                   markers.add(Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)));
                 }
 
@@ -102,6 +136,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Info de Festivo si existe
+                if (holidays.containsKey(DateTime(_selectedDay!.year, _selectedDay!.month, _selectedDay!.day)))
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 15),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.redAccent)),
+                    child: Row(children: [const Icon(Icons.flag, color: Colors.redAccent), const SizedBox(width: 10), Expanded(child: Text("¡Día Especial!: ${holidays[DateTime(_selectedDay!.year, _selectedDay!.month, _selectedDay!.day)]}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)))]),
+                  ),
+                
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
